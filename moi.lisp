@@ -220,7 +220,7 @@ returns length, thicknness and width of strut"
   "Totall k of walls along the direction of their lengths"
   (let ((k (loop for l across lengths
 				 ;; NOTE : 0.3 = column-width, 0.5 = beam thickness
-				 summing (infill-wall-stiffness (- l 0.3) thickness (- height -0.5) Ic))))
+				 summing (infill-wall-stiffness (- l 0.3) thickness (- height 0.5) Ic))))
 	(reporting
 	 (format t "~%Infill Walls (single floor) K = ~,3f" k))
 	k))
@@ -325,8 +325,8 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 
 (defun test ()
   (let* ((geometry (make-building-geometry :number-of-storey 2
-										   :l (vector 4 4)
-										   :b (vector 4 4)
+										   :l (vector 5 6 7)
+										   :b (vector 4 7.6 9)
 										   :h 3))
 		 (structure (make-structural-geometry :column-size 0.3d0
 											  :wall-thickness 0.230d0
@@ -340,6 +340,42 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 		(values M K)))))
 
 (defun reporting-test () 
-  (with-report-to-file ("/tmp/report.org" :default)
+  (with-report-to-file ("/tmp/report.org" :verbose)
 					   (test)))
+
+;; With fundamental timeperiod 
+
+(defun df-matrix (matrix)
+  (let* ((dim (array-dimensions matrix))
+		 (array (make-array dim :initial-element 0.0d0 :element-type 'double-float)))
+	(loop for i from 0 below (first dim) do 
+	  (loop for j from 0 below (second dim) do 
+			(setf (aref array i j) (coerce (aref matrix i j) 'double-float))))
+	(magicl:from-array array dim)))
+
+
+(defun timeperiods (eigenvalues)
+  (sort (mapcar (lambda (omega^2) (/ (* 2 pi) (sqrt omega^2))) eigenvalues)
+		'>))
+
+(defun simple-building (&key number-of-storey height bays-x bays-y bay-width)
+  (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
+										   :l (make-array bays-x :initial-element bay-width)
+										   :b (make-array bays-y :initial-element bay-width)
+										   :h height))
+		 (structure (make-structural-geometry)))
+	(multiple-value-bind (M xc yc) (mass-matrix geometry structure)
+	  (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc))
+			 (mm (df-matrix m))
+			 (kk (df-matrix k))
+			 (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
+			 (tp (timeperiods eigenvalues)))
+		(values mm kk (first tp) tp)))))
+
+(defun test2 () 
+  (simple-building :number-of-storey 2
+				   :height 3
+				   :bays-x 2 :bays-y 2
+				   :bay-width 3))
+			 
 
