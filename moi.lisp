@@ -159,7 +159,7 @@
 			))
 
 	(report-subsection "Slab")
-	(add s slab :x 0 :y 0 :l (+ (rect-l column) (reduce #'+ l)) :b (+ (rect-b column) (reduce #'+ b)))
+	(add s slab :x 0 :y 0 :base :bl :l (+ (rect-l column) (reduce #'+ l)) :b (+ (rect-b column) (reduce #'+ b)))
 
 	;; (setf moi (moi s)
 	;; 	  stiffness (moi stiffness-s))
@@ -192,8 +192,8 @@
 ;;;;
 ;;;;;;;;;;;;;;;;;;;;
 
-(defparameter *Ec* 25e9 "E of column")
-(defparameter *Ew* 2.65e9 "E of wall")
+(defparameter *Ec* 25d9 "E of column")
+(defparameter *Ew* 2.65d9 "E of wall")
 
 ;;; Strut Modelling
 (defun strut-dimensions (l b h &optional (Ic (* 1/12 (expt .3 4))))
@@ -304,7 +304,7 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 	   (report-subsection "Frames and Infill Walls (along Y-axis)")
 	   ;; frames along y-axis
 	   (let ((local-k (mat* (+ (infill-walls-stiffness b wall-thickness height Ic)   ;; infill walls 
-							   (* m Kc))                                    ;; columns
+							   (* n Kc))                                    ;; columns
 							nK)))
 		 (report-values "Local Stiffness " local-k)
 		 (grid xf
@@ -347,12 +347,11 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 
 (defun df-matrix (matrix)
   (let* ((dim (array-dimensions matrix))
-		 (array (make-array dim :initial-element 0.0d0 :element-type 'double-float)))
+		 (array (make-array (* (first dim) (second dim)) :initial-element 0.0d0 :element-type 'double-float)))
 	(loop for i from 0 below (first dim) do 
 	  (loop for j from 0 below (second dim) do 
-			(setf (aref array i j) (coerce (aref matrix i j) 'double-float))))
+			(setf (aref array (+ i (* (first dim) j))) (coerce (aref matrix i j) 'double-float))))
 	(magicl:from-array array dim)))
-
 
 (defun timeperiods (eigenvalues)
   (sort (mapcar (lambda (omega^2) (/ (* 2 pi) (sqrt omega^2))) eigenvalues)
@@ -378,4 +377,9 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 				   :bays-x 2 :bays-y 2
 				   :bay-width 3))
 			 
-
+(defun timeperiod (M K)
+  (let* ((mm (df-matrix m))
+		 (kk (df-matrix k))
+		 (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
+		 (tp (timeperiods eigenvalues)))
+	(values mm kk (first tp) tp eigenvalues)))

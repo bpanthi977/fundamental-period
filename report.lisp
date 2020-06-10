@@ -21,7 +21,7 @@
   (format *reporting-stream* "~%")
   (loop for i from 0 below (array-dimension mat 0) do
 	(loop for j from 0 below (array-dimension mat 1) do
-	  (format *reporting-stream* "| ~8f  " (aref mat i j)))
+	  (format *reporting-stream* "| ~12f  " (aref mat i j)))
 	(format *reporting-stream* "| ~%")))
 
 (defun pretty-print (value)
@@ -100,3 +100,6 @@
 	   (let ((*reporting-level* ,reporting-level))
 		 ,@body))))
 
+(defmacro with-reporting (reporting-level &rest body)
+`(let ((*reporting-level* ,reporting-level))
+   ,@body))
