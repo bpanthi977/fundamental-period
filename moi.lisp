@@ -17,9 +17,10 @@
 
 (defstruct (structural-geometry
 			(:conc-name sg-))
-  (column-size 0.300d0) ;; column is assumed square
-  (wall-thickness 0.230d0)
-  (slab-thickness 0.150d0))
+  (column-size 0.300d0 :type double-float) ;; column is assumed square
+  (beam-height 0.500d0 :type double-float)
+  (wall-thickness 0.230d0 :type double-float)
+  (slab-thickness 0.150d0 :type double-float))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -101,14 +102,15 @@
 		 (height (* (if top-floor? 1/2 1)
 					(bg-h building-geometry)))
 		 (slab-thickness (sg-slab-thickness structural-geometry))
+		 (beam-height (sg-beam-height structural-geometry))
 		 (cs (sg-column-size structural-geometry))
 		 (wt (sg-wall-thickness structural-geometry))
 		 
 		 (column           (make-rect :l cs     :b cs     :h (- height slab-thickness)   :density (/ 25000 9.81d0)))
-		 (beam_x           (make-rect :l nil    :b .300d0 :h .5d0                        :density (/ 25000 9.81d0)))
-		 (beam_y           (make-rect :l .300d0 :b nil    :h .5d0                        :density (/ 25000 9.81d0)))
-		 (wall_y           (make-rect :l wt     :b nil    :h (- height .5d0)             :density (/ 20000 9.81d0)))
-		 (wall_x           (make-rect :l nil    :b wt     :h (- height .5d0)             :density (/ 20000 9.81d0)))
+		 (beam_x           (make-rect :l nil    :b .300d0 :h beam-height                 :density (/ 25000 9.81d0)))
+		 (beam_y           (make-rect :l .300d0 :b nil    :h beam-height                 :density (/ 25000 9.81d0)))
+		 (wall_y           (make-rect :l wt     :b nil    :h (- height beam-height)      :density (/ 20000 9.81d0)))
+		 (wall_x           (make-rect :l nil    :b wt     :h (- height beam-height)      :density (/ 20000 9.81d0)))
 		 (slab             (make-rect :l nil    :b nil    :h slab-thickness              :density (/ 25000 9.81d0)))
 		 ;;(column-stiffness (make-rect :l .300d0 :b .300d0 :mass 1))
 		 
@@ -216,14 +218,17 @@ returns length, thicknness and width of strut"
 		 "Strut Vertical Stiffness" :detailed))
 	 k)))					
 
-(defun infill-walls-stiffness (lengths thickness height Ic)
+(defun infill-walls-stiffness (lengths height Ic structural-geometry)
   "Totall k of walls along the direction of their lengths"
-  (let ((k (loop for l across lengths
-				 ;; NOTE : 0.3 = column-width, 0.5 = beam thickness
-				 summing (infill-wall-stiffness (- l 0.3) thickness (- height 0.5) Ic))))
-	(reporting
-	 (format t "~%Infill Walls (single floor) K = ~,3f" k))
-	k))
+  (let ((column-width (sg-column-size structural-geometry))
+		(beam-height (sg-beam-height structural-geometry))
+		(thickness (sg-wall-thickness structural-geometry)))
+	(let ((k (loop for l across lengths
+				   ;; NOTE : 0.3 = column-width, 0.5 = beam thickness
+				   summing (infill-wall-stiffness (- l column-width) thickness (- height beam-height) Ic))))
+	  (reporting
+	   (format t "~%Infill Walls (single floor) K = ~,3f" k))
+	  k)))
 															 
 
 ;;; Coordinate Transforms
@@ -277,7 +282,7 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 					(t 0)))))
 	k))
 
-(defun stiffness-matrix (building-geometry structural-geometry &key xc yc)
+(defun stiffness-matrix (building-geometry structural-geometry &key xc yc (strut t))
   (report-section "Stiffness Matrix Calculation")
   (with-slots (number-of-storey l b (height h)) building-geometry
 	(with-slots (column-size wall-thickness) structural-geometry 
@@ -292,7 +297,9 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 
 	   (report-subsection "Frames and Infill Walls (along X-axis)")
 	   ;; frames along x-axis having m bays 
-	   (let ((local-k (mat* (+ (infill-walls-stiffness l wall-thickness height Ic)   ;; infill walls 
+	   (let ((local-k (mat* (+ (if strut ;; infill walls 
+								   (infill-walls-stiffness l height Ic structural-geometry)
+								   0) 
 							   (* m Kc))                                    ;; columns
 							nK)))
 		 (report-values "Local Stiffness" local-k)
@@ -303,7 +310,7 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 	   
 	   (report-subsection "Frames and Infill Walls (along Y-axis)")
 	   ;; frames along y-axis
-	   (let ((local-k (mat* (+ (infill-walls-stiffness b wall-thickness height Ic)   ;; infill walls 
+	   (let ((local-k (mat* (+ (if strut (infill-walls-stiffness b  height Ic structural-geometry) 0)   ;; infill walls 
 							   (* n Kc))                                    ;; columns
 							nK)))
 		 (report-values "Local Stiffness " local-k)
@@ -357,14 +364,14 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
   (sort (mapcar (lambda (omega^2) (/ (* 2 pi) (sqrt omega^2))) eigenvalues)
 		'>))
 
-(defun simple-building (&key number-of-storey height bays-x bays-y bay-width)
+(defun simple-building (&key number-of-storey height bays-x bays-y bay-width (strut t))
   (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
 										   :l (make-array bays-x :initial-element bay-width)
 										   :b (make-array bays-y :initial-element bay-width)
 										   :h height))
 		 (structure (make-structural-geometry)))
 	(multiple-value-bind (M xc yc) (mass-matrix geometry structure)
-	  (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc))
+	  (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc :strut strut))
 			 (mm (df-matrix m))
 			 (kk (df-matrix k))
 			 (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
@@ -383,3 +390,17 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 		 (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
 		 (tp (timeperiods eigenvalues)))
 	(values mm kk (first tp) tp eigenvalues)))
+
+(let ((hashtable (make-hash-table :test #'equal)))
+  (defun simple-building-ftp* (&rest params &key number-of-storey height bays-x bays-y bay-width (strut t))
+	(let ((ftp? (gethash params hashtable)))
+	  (if ftp?
+		  ftp?
+		  (setf (gethash params hashtable) (nth-value 2 (simple-building :number-of-storey number-of-storey
+																		 :height height
+																		 :bays-x bays-x
+																		 :bays-y bays-y
+																		 :bay-width bay-width
+																		 :strut strut))))))
+  (defun simple-building-ftp*-clear ()
+	(setf hashtable (make-hash-table :test #'equal))))
