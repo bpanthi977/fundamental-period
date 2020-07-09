@@ -57,20 +57,23 @@ Example:
 
 ;;;; Shapes
 (defstruct (rect
-			(:constructor make-rect))
-  "Rectangular shape"
-  l b h mass density)
+	    (:constructor make-rect))
+  "Rectangular shape; density is in kg/m3; area-load in kg/m2"
+  l b h mass density area-load)
 
-(defun make-rect (&key l b h mass density)
+(defun make-rect (&key l b h mass density area-load)
   (let ((r (make-instance 'rect)))
-	(setf (slot-value r 'l) l)
-	(setf (slot-value r 'b) b)
-	(setf (slot-value r 'h) h)
-	(setf (slot-value r 'density) density)
-	(setf (slot-value r 'mass) (cond (mass mass)
-									 ((and l b h density) (* l b h density))
-									 (t nil)))
-	r))
+    (setf (slot-value r 'l) l)
+    (setf (slot-value r 'b) b)
+    (setf (slot-value r 'h) h)
+    (setf (slot-value r 'density) density)
+    (setf (slot-value r 'mass) (cond (mass mass)
+				     ((and l b h density) (+ (* l b h density)
+							     (* l b (or area-load 0d0))))
+				     (t nil)))
+    (setf (slot-value r 'area-load) (or area-load 0d0))
+    r))
+
 
 (defun offsety-of (rect1 &key from to of)
   "Offset from `from' point of `rect' to the `to' point of `of'"

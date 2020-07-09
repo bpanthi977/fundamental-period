@@ -69,15 +69,17 @@
 		   (progn
 			 ,@body)))))
 
-(defmacro report-let% (binding)
+(defmacro report-let%% (binding)
   (let ((var (first binding))
-		(rhs (second binding))
-		(name (third binding))
-		(reporting-level (or (fourth binding) :default)))
-	`(if (report? ,reporting-level)
-		   (format *reporting-stream* "~%+ ~a (~a)= ~a = ~a" ,name ',var ',rhs ,var))))
+	(rhs (second binding))
+	(name (third binding)))	
+    `(format *reporting-stream* "~%+ ~a (~a)= ~a = ~a" ,name ',var ',rhs ,var)))
 
-(defmacro reporting-let* (bindings &rest body)
+(defmacro report-let% (binding)
+  `(if (report? ,(or (fourth binding) :default))
+       (report-let%% ,binding)))
+
+(defmacro reporting-let* (bindings &body body)
   (let (reports clean-bindings)
 	(loop for b in bindings do
 	  (when (and (listp b) (> (length b) 2))
@@ -90,6 +92,20 @@
 	`(let* ,(reverse clean-bindings)
 	   ,@(reverse reports)
 	   ,@body)))
+
+(defmacro reporting-let*2 (verbosity bindings &body body)
+  (let (reports clean-bindings)
+    (loop for b in bindings do
+      (when (listp b)
+	(push `(report-let%% ,b) reports))
+      (push (if (listp b)
+		(list (first b) (second b))
+		b)
+	    clean-bindings))
+    `(let* ,(reverse clean-bindings)
+       (if (report? ,verbosity)
+	   (progn ,@(reverse reports)))
+       ,@body)))
 
 (defmacro with-report-to-file ((file reporting-level &rest keys) &rest body)
   (alexandria:once-only (file)
