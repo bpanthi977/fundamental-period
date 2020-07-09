@@ -41,7 +41,6 @@
 	(y (sdl:y *translation*)))
     
     (loop for (x0 y0 l b color) in *shapes* do
-      (if (> l 1) (setf color sdl:*red*))
       (sdl:draw-rectangle-* (truncate (+ (* *scale*  x0) x))
 			    (truncate (+ (* *scale* y0) y))
 			    (truncate (* *scale* l))
@@ -72,4 +71,9 @@
 
 (with-drawing
   (with-reporting :default
-    (test)))
+    (mass-and-moments 0 (make-building-geometry :number-of-storey 1
+						:l #(5 6 7)
+						:b #(6 7 8)
+						:h 3)
+		      (make-structural-geometry :column-sizes (make-array 1 :element-type 'double-float
+									    :initial-element 0.3d0)))))
