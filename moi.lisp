@@ -15,15 +15,22 @@
   h ;; height of floor
   )
 
+(defun Ec% (fck)
+  (* 5000 (sqrt fck) 1d6))
+
+(defun Ec (Fck)
+  "E (in Pa) (Modulus of Elasticity) of columns for given Fck = Characteristic compressive strength (MPa)"
+  (map '(vector double-float) #'Ec% Fck))
+
 (defstruct (structural-geometry
 	    (:conc-name sg-))
   "floar-loads = Live Load and other loads (kN/m^2)"
-  (column-sizes #() :type (vector double-float)) ;; column is assumed square
+  (column-sizes (make-array 1 :element-type 'double-float) :type (vector double-float)) ;; column is assumed square
   (beam-height 0.500d0 :type double-float)
   (wall-thickness 0.230d0 :type double-float)
   (slab-thickness 0.150d0 :type double-float)
   (floor-loads 3.5d0 :type double-float)
-  (column-elasticity 25d9 :type double-float)
+  (column-elasticity  (Ec #(25)) :type (vector double-float))
   (wall-elasticity 2.65d9 :type double-float))
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -117,6 +124,8 @@
 	 
 	 ;; 2kN/m2 live load and 1.5kN/m2 floor finish
 	 ;; 1.5kN/m2 floor finish is decreased in walls
+
+	 ;;; TODO: use floor-loads
 	 (column  (make-rect :l cs     :b cs     :h (- height slab-thickness) :density (/ 25000 9.81d0)
 			     :area-load (if top-floor? 0d0 (/ -3500d0 9.81))))
 	 (beam_x  (make-rect :l nil    :b beam-width :h (- beam-height slab-thickness)               :density (/ 25000 9.81d0)))
@@ -237,13 +246,13 @@ Ew = E of wall "
 	(Ec (sg-column-elasticity structural-geometry))
 	(Ew (sg-wall-elasticity structural-geometry)))
 
-    (map 'vector (lambda (column-width Ic)
+    (map 'vector (lambda (column-width Ic Ec)
 		   (let ((k (loop for l across lengths
 				  summing (infill-wall-stiffness (- l column-width) thickness (- height beam-height) Ic Ec Ew))))
 		     (reporting
 		      (format t "~%Infill Walls (single floor) K = ~,3f" k))
 		     k))
-	 column-widths Ic)))
+	 column-widths Ic Ec)))
 
 
 
@@ -298,7 +307,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 			 (+ (aref Kc i) (aref Kc (1+ i)))))
 		    
 		    ((= i (+ j 1)) (- (aref Kc i)))
-		    ((= i (- j 1)) (- (aref Kc i)))
+		    ((= i (- j 1)) (- (aref Kc j)))
 		    (t 0)))))
     k))
 
@@ -313,7 +322,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	   (Ic (map 'vector #'(lambda (column-size) (* 1/12 (expt column-size 4))) column-sizes)
 	       "MOI of Columns") ;; NOTE: Assuming column is square
 	   (Ec (sg-column-elasticity structural-geometry))
-	   (Kc (map 'vector #'(lambda (Ic) (* 12 Ec Ic (/ (expt height 3)))) Ic)
+	   (Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
 	       "K of Column (each floor)")
 	   (global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey)))))
 	;; change stiffness from local to global
@@ -349,6 +358,49 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	global-k))))
 
 
+
+
+;;;;;;;;;;;;;;;;;;;;
+;;;;
+;;;; Variable Column Sizes
+;;;;
+;;;;;;;;;;;;;;;;;;;;
+
+(defparameter *column-sizes-and-Ecs* (make-hash-table :test 'equal))
+
+(defun supremum (n list)
+  (loop for x in list do
+    (when (<= n x)
+      (return x))))
+
+(defun cs-and-Ec (n h bw)
+  (let ((h (supremum h '(4)))
+	(bw (supremum bw '(3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0))))
+    (gethash (list n h bw) *column-sizes-and-ecs*)))
+
+(defun (setf cs-and-Ec) (value n h bw)
+  (setf (gethash (list n h bw) *column-sizes-and-ecs*) value))
+
+;; (defun cs-and-Ecs (n h bw)
+;;   "Variable column widths"
+;;   (loop for i from 0 below n
+;; 	for cs-ec = (cs-and-ec (- n i) h bw)
+;; 	collect (coerce (first cs-ec) 'double-float) into cs
+;; 	collect (coerce (second cs-ec) 'double-float) into ec
+;; 	finally (return (values (make-array n :element-type 'double-float :initial-contents cs)
+;; 				(make-array n :element-type 'double-float :initial-contents ec)))))
+
+(defun cs-and-Ecs (n h bw)
+  "Uniform Column Widths"
+  (destructuring-bind (cs ec) (cs-and-Ec n h bw)
+    (values (make-array n :element-type 'double-float :initial-element (coerce cs 'double-float))
+	    (make-array n :element-type 'double-float :initial-element (coerce ec 'double-float)))))
+
+(defun make-structural-geometry2 (n h bw)
+  (multiple-value-bind (cs ce) (cs-and-Ecs n h bw)
+    (make-structural-geometry :column-sizes cs
+			      :column-elasticity ce)))
+
 ;;;;;;;;;;;;;;;;;;;;
 ;;;;
 ;;;; Everything Together
@@ -361,7 +413,8 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 					   :b (vector 4 7.6 9)
 					   :h 3))
 	 (structure (make-structural-geometry :column-sizes (make-array 2 :element-type 'double-float
-								       :initial-element 0.3d0)
+									  :initial-element 0.3d0)
+					      :column-elasticity (Ec #(25 25))
 					      :wall-thickness 0.230d0
 					      :slab-thickness 0.15d0)))
     (report-section "Inputs")
@@ -395,8 +448,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 					   :l (make-array bays-x :initial-element bay-width)
 					   :b (make-array bays-y :initial-element bay-width)
 					   :h height))
-	 (structure (make-structural-geometry
-		     :column-sizes (make-array number-of-storey :element-type 'double-float :initial-element 0.3d0))))
+	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
     (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
       (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc :strut strut))
 	     (mm (df-matrix m))
@@ -406,13 +458,23 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	(values mm kk (first tp) tp)))))
 
 
+(defun simple-building-k (&key number-of-storey height bays-x bays-y bay-width (strut t))
+  (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
+					   :l (make-array bays-x :initial-element bay-width)
+					   :b (make-array bays-y :initial-element bay-width)
+					   :h height))
+	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
+    (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
+      (with-reporting :verbose 
+	(stiffness-matrix geometry structure :xc xc :yc yc :strut strut)))))
+
+
 (defun simple-building-shapes (&key number-of-storey height bays-x bays-y bay-width (strut t))
   (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
 					   :l (make-array bays-x :initial-element bay-width)
 					   :b (make-array bays-y :initial-element bay-width)
 					   :h height))
-	 (structure (make-structural-geometry
-		     :column-sizes (make-array number-of-storey :element-type 'double-float :initial-element 0.3d0))))
+	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
     (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
       (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc :strut strut))
 	     (mm (df-matrix m))
@@ -462,8 +524,9 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 											  :l l
 											  :b b
 											  :h height)
-								  (make-structural-geometry
-								   :column-sizes (make-array number-of-storey :element-type 'double-float :initial-element 0.3d0))
+								  (make-structural-geometry2 number-of-storey height
+											     (max (reduce #'max l)
+												  (reduce #'max b)))
 								  :strut strut))))))
   (defun building-ftp*-clear ()
     (setf hashtable (make-hash-table :test #'equal))))

@@ -137,3 +137,15 @@ Example:
 
 (defmacro mincf(mat incm)
   `(setf ,mat (mat+ ,mat ,incm)))
+
+(defun symmetric-p (mat)
+  (let ((dim (array-dimensions mat)))
+    (assert (= (first dim) (second dim)))
+    (loop for i from 0 below (first dim) do
+      (loop for j from 0 below i do
+	(unless (= (aref mat i j) (aref mat j i))
+	  (format t "At ~a,~a = ~a but at ~a,~a = ~a"
+		  i j (aref mat i j)
+		  j i (aref mat j i))
+	  (return-from symmetric-p nil))))
+    t))
