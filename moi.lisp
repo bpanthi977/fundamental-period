@@ -13,6 +13,7 @@
   l  ;; centre to centre distance betn columns in x dir
   b     ;; centre to centre distance betn columns in y dir
   h ;; height of floor
+  (bareframe nil :type boolean)
   )
 
 (defun Ec% (fck)
@@ -26,7 +27,8 @@
 	    (:conc-name sg-))
   "floar-loads = Live Load and other loads (kN/m^2)"
   (column-sizes (make-array 1 :element-type 'double-float) :type (vector double-float)) ;; column is assumed square
-  (beam-height 0.500d0 :type double-float)
+  (beam-thickness 0.500d0 :type double-float)
+  (beam-width 0.300d0 :type double-float)
   (wall-thickness 0.230d0 :type double-float)
   (slab-thickness 0.150d0 :type double-float)
   (floor-loads 3.5d0 :type double-float)
@@ -111,11 +113,12 @@
 	 (b (bg-b building-geometry))
 	 (m (1+ (length l)))            ;; number of columns in x-dir
 	 (n (1+ (length b)))            ;; number of columns in y-dir
+	 (bare? (bg-bareframe building-geometry))
 	 (height (* (if top-floor? 1/2 1)
 		    (bg-h building-geometry)))
 	 (slab-thickness (sg-slab-thickness structural-geometry))
-	 (beam-height (sg-beam-height structural-geometry))
-	 (beam-width .300d0)
+	 (beam-height (sg-beam-thickness structural-geometry))
+	 (beam-width (sg-beam-width structural-geometry))
 	 (cs (aref (sg-column-sizes structural-geometry) floor))
 	 (wt (sg-wall-thickness structural-geometry))
 	 ;; TODO: either take wall-height = height - beam-height and beam_z = beam-height - slab-thickness
@@ -167,7 +170,7 @@
 	  ;; 		    ((= j (1- n)) (offsety-of wall_x :from :centre :to :centre    :of column))
 	  ;; 		    (t            0))))
 	  (add s beam_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)))
-	  (add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)))
+	  (unless bare? (add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column))))
 	    )
 
     ;; Beams and Walls along the breadth (y - axis)
@@ -182,7 +185,7 @@
 	  ;; 		    ((= i (1- m)) (offsetx-of wall_y :from :centre  :to :centre  :of column))
 	  ;; 		    (t            0))))
 	    (add s beam_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))
-	    (add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))
+	    (unless bare? (add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column))))
 	    )
 
     (report-subsection "Slab")
@@ -241,11 +244,10 @@ Ew = E of wall "
 (defun infill-walls-stiffness (lengths height Ic structural-geometry)
   "Totall k of walls along the direction of their lengths"
   (let ((column-widths (sg-column-sizes structural-geometry))
-	(beam-height (sg-beam-height structural-geometry))
+	(beam-height (sg-beam-thickness structural-geometry))
 	(thickness (sg-wall-thickness structural-geometry))
 	(Ec (sg-column-elasticity structural-geometry))
 	(Ew (sg-wall-elasticity structural-geometry)))
-
     (map 'vector (lambda (column-width Ic Ec)
 		   (let ((k (loop for l across lengths
 				  summing (infill-wall-stiffness (- l column-width) thickness (- height beam-height) Ic Ec Ew))))
@@ -324,7 +326,9 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	   (Ec (sg-column-elasticity structural-geometry))
 	   (Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
 	       "K of Column (each floor)")
-	   (global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey)))))
+	   (global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey))))
+	   (bare? (bg-bareframe building-geometry))
+	   (strut (and strut (not bare?))))
 	;; change stiffness from local to global
 
 	(report-subsection "Frames and Infill Walls (along X-axis)")
