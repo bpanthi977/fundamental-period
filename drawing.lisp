@@ -41,10 +41,10 @@
 	(y (sdl:y *translation*)))
     
     (loop for (x0 y0 l b color) in *shapes* do
-      (sdl:draw-rectangle-* (truncate (+ (* *scale*  x0) x))
-			    (truncate (+ (* *scale* y0) y))
-			    (truncate (* *scale* l))
-			    (truncate (* *scale* b)) :color color))))
+	  (sdl:draw-rectangle-* (truncate (+ (* *scale*  x0) x))
+				(truncate (+ (* *scale* y0) y))
+				(truncate (* *scale* l))
+				(truncate (* *scale* b)) :color color))))
 
 (defmacro with-drawing (&body body)
   `(let* ((*register-shape-for-drawing* t)
@@ -61,7 +61,7 @@
      ,@body
      (sdl-gui-utils::push-interface evh drager-scaler :hoverable? nil :drawable? nil)
      (sdl-gui-utils::loop-with-events-to (evh)
-       (draw-shapes))))
+					 (draw-shapes))))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;;; MAGIC
@@ -70,10 +70,10 @@
 
 
 (with-drawing
-  (with-reporting :default
-    (mass-and-moments 0 (make-building-geometry :number-of-storey 1
-						:l #(5 6 7)
-						:b #(6 7 8)
-						:h 3)
-		      (make-structural-geometry :column-sizes (make-array 1 :element-type 'double-float
+    (with-reporting :default
+      (mass-and-moments 0 (make-building-geometry :number-of-storey 1
+						  :l #(5 6 7)
+						  :b #(6 7 8)
+						  :h 3)
+			(make-structural-geometry :column-sizes (make-array 1 :element-type 'double-float
 									    :initial-element 0.3d0)))))

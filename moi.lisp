@@ -8,7 +8,7 @@
 
 ;;; Data types
 (defstruct (building-geometry
-	    (:conc-name bg-))
+	     (:conc-name bg-))
   number-of-storey
   l  ;; centre to centre distance betn columns in x dir
   b     ;; centre to centre distance betn columns in y dir
@@ -24,7 +24,7 @@
   (map '(vector double-float) #'Ec% Fck))
 
 (defstruct (structural-geometry
-	    (:conc-name sg-))
+	     (:conc-name sg-))
   "floar-loads = Live Load and other loads (kN/m^2)"
   (column-sizes (make-array 1 :element-type 'double-float) :type (vector double-float)) ;; column is assumed square
   (beam-thickness 0.500d0 :type double-float)
@@ -139,7 +139,7 @@
 			     :area-load (if top-floor? 0d0 (/ -3500d0 9.81))))
 	 (slab    (make-rect :l nil    :b nil    :h slab-thickness            :density (/ 25000 9.81d0)
 			     :area-load (if top-floor? 0d0 (/ 3500d0 9.81))))
-    		
+    	 
 	 ;;(column-stiffness (make-rect :l .300d0 :b .300d0 :mass 1))
 	 
 	 (s (make-moi-sums))
@@ -171,7 +171,7 @@
 	  ;; 		    (t            0))))
 	  (add s beam_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)))
 	  (unless bare? (add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column))))
-	    )
+	  )
 
     ;; Beams and Walls along the breadth (y - axis)
     (report-subsection "Beams and Walls (y-axis)")
@@ -184,15 +184,15 @@
 	  ;; 		    ((= i 0)   (- (offsetx-of wall_y :from :centre  :to :centre  :of column)))
 	  ;; 		    ((= i (1- m)) (offsetx-of wall_y :from :centre  :to :centre  :of column))
 	  ;; 		    (t            0))))
-	    (add s beam_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))
-	    (unless bare? (add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column))))
-	    )
+	  (add s beam_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))
+	  (unless bare? (add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column))))
+	  )
 
     (report-subsection "Slab")
     (add s slab :x (- (/ (rect-l column) 2)) :y (- (/ (rect-b column) 2))
-		:base :bl :l (+ (rect-l column) (reduce #'+ l)) :b (+ (rect-b column) (reduce #'+ b)))
+	 :base :bl :l (+ (rect-l column) (reduce #'+ l)) :b (+ (rect-b column) (reduce #'+ b)))
 
-  
+    
     (setf moi (moi s))
     (report-subsection "Floor Mass Values")
     (report-values "" moi)
@@ -205,11 +205,11 @@
     (loop for floor from 0 to (1- n) 
 	  for i = (* 3 floor)
 	  for moi = (mass-and-moments floor building-geometry structural-geometry  (= floor (1- n))) do
-	    (when (= floor 0)
-	      (setf xc (moi-xc moi) yc (moi-yc moi)))
-	    (setf (aref M i i)             (moi-mass moi)
-		  (aref M (1+ i) (1+ i))   (moi-mass moi)
-		  (aref M (+ 2 i) (+ 2 i))  (moi-ipc  moi)))
+	  (when (= floor 0)
+	    (setf xc (moi-xc moi) yc (moi-yc moi)))
+	  (setf (aref M i i)             (moi-mass moi)
+		(aref M (1+ i) (1+ i))   (moi-mass moi)
+		(aref M (+ 2 i) (+ 2 i))  (moi-ipc  moi)))
     (values M xc yc)))
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -237,7 +237,7 @@ Ew = E of wall "
 (defun infill-wall-stiffness (length thickness height Ic Ec Ew)
   (multiple-value-bind (lds tds wds theta) (strut-dimensions length thickness height Ic Ec Ew)
     (reporting-let*
-	((k (* tds wds Ew (/ Lds) (expt (cos theta) 2))
+     ((k (* tds wds Ew (/ Lds) (expt (cos theta) 2))
 	 "Strut Vertical Stiffness" :detailed))
      k)))					
 
@@ -268,22 +268,22 @@ The `global-k' is 3n by 3n matrix that takes global displacement [x,y,theta, ...
 	 (A (zeros (list n (* 3 n)))))
     ;; A converts from local coordinate to global coordinate
     (loop for i from 0 below n do
-      (ecase direction
-	(:y ;; A is transformation matrix x' = x - y theta
-	 ;; [1 0 -y  0 0  0  0 0 ...
-	 ;;  0 0  0  1 0 -y  0 0 ...
-	 ;;  0 0  0  0 0  0  1 0 ...
-	 ;;  . . . ]		  
-	 (setf (aref A i (* 3 i)) 1
-	       (aref A i (+ 2 (* 3 i))) (- distance)))
-	(:x
-	 ;; A is transformation matrix y' = y + x theta
-	 ;; [0 1 x   0 0 0   0 0 ...
-	 ;;  0 0 0   0 1 x   0 0 ...
-	 ;;  0 0 0   0 0 0   0 1 ...
-	 ;;  ... ]
-	 (setf (aref A i (+ 1 (* 3 i))) 1
-	       (aref A i (+ 2 (* 3 i))) distance))))
+	  (ecase direction
+	    (:y ;; A is transformation matrix x' = x - y theta
+	     ;; [1 0 -y  0 0  0  0 0 ...
+	     ;;  0 0  0  1 0 -y  0 0 ...
+	     ;;  0 0  0  0 0  0  1 0 ...
+	     ;;  . . . ]		  
+	     (setf (aref A i (* 3 i)) 1
+		   (aref A i (+ 2 (* 3 i))) (- distance)))
+	    (:x
+	     ;; A is transformation matrix y' = y + x theta
+	     ;; [0 1 x   0 0 0   0 0 ...
+	     ;;  0 0 0   0 1 x   0 0 ...
+	     ;;  0 0 0   0 0 0   0 1 ...
+	     ;;  ... ]
+	     (setf (aref A i (+ 1 (* 3 i))) 1
+		   (aref A i (+ 2 (* 3 i))) distance))))
     (reporting :detailed
 	       (format t "Transformation matrix for (distance = ~,3f, direction= ~a)" distance direction)
 	       (pretty-print A))
@@ -301,16 +301,16 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
   (let ((k (make-array (list n n))))
     ;; fill the matrix with coeffs of k for a single column frame of height h
     (loop for i from 0 below n do
-      (loop for j from 0 below n do
-	(setf (aref k i j)
-	      (cond ((= i j)
-		     (if (= j (1- n))
-			 (aref Kc i)
-			 (+ (aref Kc i) (aref Kc (1+ i)))))
-		    
-		    ((= i (+ j 1)) (- (aref Kc i)))
-		    ((= i (- j 1)) (- (aref Kc j)))
-		    (t 0)))))
+	  (loop for j from 0 below n do
+		(setf (aref k i j)
+		      (cond ((= i j)
+			     (if (= j (1- n))
+				 (aref Kc i)
+				 (+ (aref Kc i) (aref Kc (1+ i)))))
+			    
+			    ((= i (+ j 1)) (- (aref Kc i)))
+			    ((= i (- j 1)) (- (aref Kc j)))
+			    (t 0)))))
     k))
 
 (defun stiffness-matrix (building-geometry structural-geometry &key xc yc (strut t))
@@ -319,47 +319,47 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
   (with-slots (number-of-storey l b (height h)) building-geometry
     (with-slots (column-sizes wall-thickness) structural-geometry 
       (reporting-let*
-	  ((m (1+ (length l)))
-	   (n (1+ (length b)))
-	   (Ic (map 'vector #'(lambda (column-size) (* 1/12 (expt column-size 4))) column-sizes)
-	       "MOI of Columns") ;; NOTE: Assuming column is square
-	   (Ec (sg-column-elasticity structural-geometry))
-	   (Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
-	       "K of Column (each floor)")
-	   (global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey))))
-	   (bare? (bg-bareframe building-geometry))
-	   (strut (and strut (not bare?))))
-	;; change stiffness from local to global
+       ((m (1+ (length l)))
+	(n (1+ (length b)))
+	(Ic (map 'vector #'(lambda (column-size) (* 1/12 (expt column-size 4))) column-sizes)
+	    "MOI of Columns") ;; NOTE: Assuming column is square
+	(Ec (sg-column-elasticity structural-geometry))
+	(Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
+	    "K of Column (each floor)")
+	(global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey))))
+	(bare? (bg-bareframe building-geometry))
+	(strut (and strut (not bare?))))
+       ;; change stiffness from local to global
 
-	(report-subsection "Frames and Infill Walls (along X-axis)")
-	;; frames along x-axis having m bays 
-	(let* ((Kw (if strut (infill-walls-stiffness l height Ic structural-geometry)))
-	       (Kc (map 'vector #'(lambda (K) (* m K)) Kc))
-	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	       (local-k (n-floors-k number-of-storey each-floor-k)))
+       (report-subsection "Frames and Infill Walls (along X-axis)")
+       ;; frames along x-axis having m bays 
+       (let* ((Kw (if strut (infill-walls-stiffness l height Ic structural-geometry)))
+	      (Kc (map 'vector #'(lambda (K) (* m K)) Kc))
+	      (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
+	      (local-k (n-floors-k number-of-storey each-floor-k)))
 
-	  (report-values "Local Stiffness" local-k)
-	  (grid yf   ;; y coordinate of frames
-		:shift (- yc) ;; change y coord relative to mass centre TODO: ground floor !! sure?
-		:size n :at b :do
-		(mincf global-k (local-to-global-k local-k :direction :y :distance yf))))
-	
-	(report-subsection "Frames and Infill Walls (along Y-axis)")
-	;; frames along y-axis
-	(let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry)))
-	       (Kc (map 'vector #'(lambda (K) (* n K)) Kc))
-	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	       (local-k (n-floors-k number-of-storey each-floor-K)))
+	 (report-values "Local Stiffness" local-k)
+	 (grid yf   ;; y coordinate of frames
+	       :shift (- yc) ;; change y coord relative to mass centre TODO: ground floor !! sure?
+	       :size n :at b :do
+	       (mincf global-k (local-to-global-k local-k :direction :y :distance yf))))
+       
+       (report-subsection "Frames and Infill Walls (along Y-axis)")
+       ;; frames along y-axis
+       (let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry)))
+	      (Kc (map 'vector #'(lambda (K) (* n K)) Kc))
+	      (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
+	      (local-k (n-floors-k number-of-storey each-floor-K)))
 
-	  (report-values "Local Stiffness " local-k)
-	  (grid xf
-		:shift (- xc)
-		:size m
-		:at l :do
-		(mincf global-k (local-to-global-k local-k
-						   :direction :x :distance xf))))
-	
-	global-k))))
+	 (report-values "Local Stiffness " local-k)
+	 (grid xf
+	       :shift (- xc)
+	       :size m
+	       :at l :do
+	       (mincf global-k (local-to-global-k local-k
+						  :direction :x :distance xf))))
+       
+       global-k))))
 
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -374,7 +374,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 					   :b (vector 3 3)
 					   :h 3))
 	 (structure (make-structural-geometry :column-sizes (make-array 3 :element-type 'double-float
-									  :initial-element 0.3d0)
+									:initial-element 0.3d0)
 					      :column-elasticity (Ec #(20 20 20))
 					      :wall-thickness 0.230d0
 					      :slab-thickness 0.15d0)))
@@ -388,7 +388,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 
 (defun reporting-test () 
   (with-report-to-file ("/tmp/report.org" :verbose)
-		       (test)))
+    (test)))
 
 ;; With fundamental timeperiod 
 
@@ -396,8 +396,8 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
   (let* ((dim (array-dimensions matrix))
 	 (array (make-array (* (first dim) (second dim)) :initial-element 0.0d0 :element-type 'double-float)))
     (loop for i from 0 below (first dim) do 
-      (loop for j from 0 below (second dim) do 
-	(setf (aref array (+ i (* (first dim) j))) (coerce (aref matrix i j) 'double-float))))
+	  (loop for j from 0 below (second dim) do 
+		(setf (aref array (+ i (* (first dim) j))) (coerce (aref matrix i j) 'double-float))))
     (magicl:from-array array dim)))
 
 (defun timeperiods (eigenvalues)
