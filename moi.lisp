@@ -358,49 +358,6 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	global-k))))
 
 
-
-
-;;;;;;;;;;;;;;;;;;;;
-;;;;
-;;;; Variable Column Sizes
-;;;;
-;;;;;;;;;;;;;;;;;;;;
-
-(defparameter *column-sizes-and-Ecs* (make-hash-table :test 'equal))
-
-(defun supremum (n list)
-  (loop for x in list do
-    (when (<= n x)
-      (return x))))
-
-(defun cs-and-Ec (n h bw)
-  (let ((h (supremum h '(4)))
-	(bw (supremum bw '(3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0))))
-    (gethash (list n h bw) *column-sizes-and-ecs*)))
-
-(defun (setf cs-and-Ec) (value n h bw)
-  (setf (gethash (list n h bw) *column-sizes-and-ecs*) value))
-
-;; (defun cs-and-Ecs (n h bw)
-;;   "Variable column widths"
-;;   (loop for i from 0 below n
-;; 	for cs-ec = (cs-and-ec (- n i) h bw)
-;; 	collect (coerce (first cs-ec) 'double-float) into cs
-;; 	collect (coerce (second cs-ec) 'double-float) into ec
-;; 	finally (return (values (make-array n :element-type 'double-float :initial-contents cs)
-;; 				(make-array n :element-type 'double-float :initial-contents ec)))))
-
-(defun cs-and-Ecs (n h bw)
-  "Uniform Column Widths"
-  (destructuring-bind (cs ec) (cs-and-Ec n h bw)
-    (values (make-array n :element-type 'double-float :initial-element (coerce cs 'double-float))
-	    (make-array n :element-type 'double-float :initial-element (coerce ec 'double-float)))))
-
-(defun make-structural-geometry2 (n h bw)
-  (multiple-value-bind (cs ce) (cs-and-Ecs n h bw)
-    (make-structural-geometry :column-sizes cs
-			      :column-elasticity ce)))
-
 ;;;;;;;;;;;;;;;;;;;;
 ;;;;
 ;;;; Everything Together
@@ -408,13 +365,13 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 ;;;;;;;;;;;;;;;;;;;;
 
 (defun test ()
-  (let* ((geometry (make-building-geometry :number-of-storey 2
-					   :l (vector 5 6 7)
-					   :b (vector 4 7.6 9)
+  (let* ((geometry (make-building-geometry :number-of-storey 3
+					   :l (vector 4 4 4)
+					   :b (vector 3 3)
 					   :h 3))
-	 (structure (make-structural-geometry :column-sizes (make-array 2 :element-type 'double-float
+	 (structure (make-structural-geometry :column-sizes (make-array 3 :element-type 'double-float
 									  :initial-element 0.3d0)
-					      :column-elasticity (Ec #(25 25))
+					      :column-elasticity (Ec #(20 20 20))
 					      :wall-thickness 0.230d0
 					      :slab-thickness 0.15d0)))
     (report-section "Inputs")
@@ -423,7 +380,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
       (let ((K (stiffness-matrix geometry structure :xc xc :yc yc)))
 	(report-section "Output")
 	(report "" M K)
-	(values M K)))))
+	(values M K (fundamental-timeperiod M k))))))
 
 (defun reporting-test () 
   (with-report-to-file ("/tmp/report.org" :verbose)
@@ -443,52 +400,6 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
   (sort (mapcar (lambda (omega^2) (/ (* 2 pi) (sqrt omega^2))) eigenvalues)
 	'>))
 
-(defun simple-building (&key number-of-storey height bays-x bays-y bay-width (strut t))
-  (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
-					   :l (make-array bays-x :initial-element bay-width)
-					   :b (make-array bays-y :initial-element bay-width)
-					   :h height))
-	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
-    (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
-      (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc :strut strut))
-	     (mm (df-matrix m))
-	     (kk (df-matrix k))
-	     (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
-	     (tp (timeperiods eigenvalues)))
-	(values mm kk (first tp) tp)))))
-
-
-(defun simple-building-k (&key number-of-storey height bays-x bays-y bay-width (strut t))
-  (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
-					   :l (make-array bays-x :initial-element bay-width)
-					   :b (make-array bays-y :initial-element bay-width)
-					   :h height))
-	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
-    (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
-      (with-reporting :verbose 
-	(stiffness-matrix geometry structure :xc xc :yc yc :strut strut)))))
-
-
-(defun simple-building-shapes (&key number-of-storey height bays-x bays-y bay-width (strut t))
-  (let* ((geometry (make-building-geometry :number-of-storey number-of-storey
-					   :l (make-array bays-x :initial-element bay-width)
-					   :b (make-array bays-y :initial-element bay-width)
-					   :h height))
-	 (structure (make-structural-geometry2 number-of-storey height bay-width)))
-    (multiple-value-bind (M xc yc) (mass-matrix geometry structure)
-      (let* ((K (stiffness-matrix geometry structure :xc xc :yc yc :strut strut))
-	     (mm (df-matrix m))
-	     (kk (df-matrix k)))
-	(magicl:eig (magicl:@ (magicl:inv mm) kk))))))
-
-
-
-(defun test2 () 
-  (simple-building :number-of-storey 2
-		   :height 3
-		   :bays-x 2 :bays-y 2
-		   :bay-width 3))
-
 (defun timeperiod (M K)
   (let* ((mm (df-matrix m))
 	 (kk (df-matrix k))
@@ -496,37 +407,9 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	 (tp (timeperiods eigenvalues)))
     (values mm kk (first tp) tp eigenvalues)))
 
-(let ((hashtable (make-hash-table :test #'equal)))
-  (defun simple-building-ftp* (&rest params &key number-of-storey height bays-x bays-y bay-width (strut t))
-    (let ((ftp? (gethash params hashtable)))
-      (if ftp?
-	  ftp?
-	  (setf (gethash params hashtable) (nth-value 2 (simple-building :number-of-storey number-of-storey
-									 :height height
-									 :bays-x bays-x
-									 :bays-y bays-y
-									 :bay-width bay-width
-									 :strut strut))))))
-  (defun simple-building-ftp*-clear ()
-    (setf hashtable (make-hash-table :test #'equal))))
-
-
-(let ((hashtable (make-hash-table :test #'equal)))
-  (defun building (bg sg &key (strut t))
-    (multiple-value-bind (M xc yc) (mass-matrix bg sg)
-      (timeperiod M (stiffness-matrix bg sg :xc xc :yc yc :strut strut))))
-  
-  (defun building-ftp* (&rest params &key number-of-storey height l b (strut t))
-    (let ((ftp? (gethash params hashtable)))
-      (if ftp?
-	  ftp?
-	  (setf (gethash params hashtable) (nth-value 2 (building (make-building-geometry :number-of-storey number-of-storey
-											  :l l
-											  :b b
-											  :h height)
-								  (make-structural-geometry2 number-of-storey height
-											     (max (reduce #'max l)
-												  (reduce #'max b)))
-								  :strut strut))))))
-  (defun building-ftp*-clear ()
-    (setf hashtable (make-hash-table :test #'equal))))
+(defun fundamental-timeperiod (M K)
+  (let* ((mm (df-matrix m))
+	 (kk (df-matrix k))
+	 (eigenvalues (magicl:eig (magicl:@ (magicl:inv mm) kk)))
+	 (tp (timeperiods eigenvalues)))
+    (first tp)))
