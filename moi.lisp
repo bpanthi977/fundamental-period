@@ -317,49 +317,51 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
   ;; xc, yc is of ground floor
   (report-section "Stiffness Matrix Calculation")
   (with-slots (number-of-storey l b (height h)) building-geometry
-    (with-slots (column-sizes wall-thickness) structural-geometry 
+    (with-slots (column-sizes wall-thickness exterior-wall-thickness) structural-geometry 
       (reporting-let*
-       ((m (1+ (length l)))
-	(n (1+ (length b)))
-	(Ic (map 'vector #'(lambda (column-size) (* 1/12 (expt column-size 4))) column-sizes)
-	    "MOI of Columns") ;; NOTE: Assuming column is square
-	(Ec (sg-column-elasticity structural-geometry))
-	(Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
-	    "K of Column (each floor)")
-	(global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey))))
-	(bare? (bg-bareframe building-geometry))
-	(strut (and strut (not bare?))))
-       ;; change stiffness from local to global
+	  ((m (1+ (length l)))
+	   (n (1+ (length b)))
+	   (Ic (map 'vector #'(lambda (column-size) (* 1/12 (expt column-size 4))) column-sizes)
+	       "MOI of Columns") ;; NOTE: Assuming column is square
+	   (Ec (sg-column-elasticity structural-geometry))
+	   (Kc (map 'vector #'(lambda (Ic Ec) (* 12 Ec Ic (/ (expt height 3)))) Ic Ec)
+	       "K of Column (each floor)")
+	   (global-k (zeros (list (* 3 number-of-storey) (* 3 number-of-storey))))
+	   (bare? (bg-bareframe building-geometry))
+	   (strut (and strut (not bare?))))
+	;; change stiffness from local to global
 
-       (report-subsection "Frames and Infill Walls (along X-axis)")
-       ;; frames along x-axis having m bays 
-       (let* ((Kw (if strut (infill-walls-stiffness l height Ic structural-geometry)))
-	      (Kc (map 'vector #'(lambda (K) (* m K)) Kc))
-	      (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	      (local-k (n-floors-k number-of-storey each-floor-k)))
+	(report-subsection "Frames and Infill Walls (along X-axis)")
+	;; frames along x-axis having m bays 
+	(let* ((Kw (if strut (infill-walls-stiffness l height Ic structural-geometry :exterior nil)))
+	       (Kc (map 'vector #'(lambda (K) (* m K)) Kc))
+	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
+	       (local-k (n-floors-k number-of-storey each-floor-k)))
 
-	 (report-values "Local Stiffness" local-k)
-	 (grid yf   ;; y coordinate of frames
-	       :shift (- yc) ;; change y coord relative to mass centre TODO: ground floor !! sure?
-	       :size n :at b :do
-	       (mincf global-k (local-to-global-k local-k :direction :y :distance yf))))
-       
-       (report-subsection "Frames and Infill Walls (along Y-axis)")
-       ;; frames along y-axis
-       (let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry)))
-	      (Kc (map 'vector #'(lambda (K) (* n K)) Kc))
-	      (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	      (local-k (n-floors-k number-of-storey each-floor-K)))
+	  (report-values "Local Stiffness" local-k)
+	  (grid yf   ;; y coordinate of frames
+		:shift (- yc) ;; change y coord relative to mass centre TODO: ground floor !! sure?
+		:size n :at b :do
+		(mincf global-k (local-to-global-k local-k :direction :y :distance yf))))
+	
+	(report-subsection "Frames and Infill Walls (along Y-axis)")
+	;; frames along y-axis
+	(let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry)))
+	       (Kc (map 'vector #'(lambda (K) (* n K)) Kc))
+	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
+	       (local-k (n-floors-k number-of-storey each-floor-K)))
 
-	 (report-values "Local Stiffness " local-k)
-	 (grid xf
-	       :shift (- xc)
-	       :size m
-	       :at l :do
-	       (mincf global-k (local-to-global-k local-k
-						  :direction :x :distance xf))))
-       
-       global-k))))
+	  (report-values "Local Stiffness " local-k)
+	  (grid xf
+		:shift (- xc)
+		:size m
+		:at l :do
+		(mincf global-k (local-to-global-k local-k
+						   :direction :x :distance xf))))
+	(report-section "Stiffness Matrix")
+	(reporting
+	 (mprint global-k))
+	global-k))))
 
 
 ;;;;;;;;;;;;;;;;;;;;
