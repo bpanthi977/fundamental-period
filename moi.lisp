@@ -29,7 +29,8 @@
   (column-sizes (make-array 1 :element-type 'double-float) :type (vector double-float)) ;; column is assumed square
   (beam-thickness 0.500d0 :type double-float)
   (beam-width 0.300d0 :type double-float)
-  (wall-thickness 0.230d0 :type double-float)
+  (wall-thickness 0.1250d0 :type double-float)
+  (exterior-wall-thickness 0.230d0 :type double-float)
   (slab-thickness 0.150d0 :type double-float)
   (floor-loads 3.5d0 :type double-float)
   (column-elasticity  (Ec #(25)) :type (vector double-float))
@@ -87,7 +88,10 @@
 	 (setf xc (+ x (/ l 2))
 	       yc y)))
       (reporting
-       (format t "~& mass = ~,3f * ~,3f * ~,3f * ~,3f = ~,3f, " (slot-value r 'density) l b (slot-value r 'h) mass)
+       (if (slot-value r 'area-load)
+	   (format t "~& mass = ~,3f * ~,3f * ~,3f * ~,3f + ~,3f * ~,3f * ~,3f = ~,3f, " (slot-value r 'density) l b (slot-value r 'h)
+		   l b (slot-value r 'area-load) mass)
+	   (format t "~& mass = ~,3f * ~,3f * ~,3f * ~,3f = ~,3f, " (slot-value r 'density) l b (slot-value r 'h) mass))
        (format t "at (~a, ~a)" xc yc))
       (incf mx (* mass xc))
       (incf my (* mass yc))
@@ -121,6 +125,7 @@
 	 (beam-width (sg-beam-width structural-geometry))
 	 (cs (aref (sg-column-sizes structural-geometry) floor))
 	 (wt (sg-wall-thickness structural-geometry))
+	 (wtExterior (sg-exterior-wall-thickness structural-geometry))
 	 ;; TODO: either take wall-height = height - beam-height and beam_z = beam-height - slab-thickness
 	 ;;       or     take wall-height = height - (beam-height - slab-thickness) and beam_z = beam-height
 	 (wall-height (- height beam-height))
@@ -170,7 +175,11 @@
 	  ;; 		    ((= j (1- n)) (offsety-of wall_x :from :centre :to :centre    :of column))
 	  ;; 		    (t            0))))
 	  (add s beam_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)))
-	  (unless bare? (add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column))))
+	  (unless bare?
+	    (if (or (= j 0)
+		    (= j (1- n)))
+		(add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)) :b wtExterior)
+		(add s wall_x :x x :y y :base :cl :l (- (aref l i) (rect-l column)))))
 	  )
 
     ;; Beams and Walls along the breadth (y - axis)
@@ -185,7 +194,11 @@
 	  ;; 		    ((= i (1- m)) (offsetx-of wall_y :from :centre  :to :centre  :of column))
 	  ;; 		    (t            0))))
 	  (add s beam_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))
-	  (unless bare? (add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column))))
+	  (unless bare?
+	    (if (or (= i 0)
+		    (= i (1- m)))
+		(add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)) :l wtExterior)
+		(add s wall_y :x x :y y :base :bc :b (- (aref b j) (rect-b column)))))
 	  )
 
     (report-subsection "Slab")
@@ -210,6 +223,9 @@
 	  (setf (aref M i i)             (moi-mass moi)
 		(aref M (1+ i) (1+ i))   (moi-mass moi)
 		(aref M (+ 2 i) (+ 2 i))  (moi-ipc  moi)))
+    (report-section "Mass Matrix")
+    (reporting
+       (mprint M))
     (values M xc yc)))
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -241,11 +257,12 @@ Ew = E of wall "
 	 "Strut Vertical Stiffness" :detailed))
      k)))					
 
-(defun infill-walls-stiffness (lengths height Ic structural-geometry)
+(defun infill-walls-stiffness (lengths height Ic structural-geometry &key exterior)
   "Totall k of walls along the direction of their lengths"
   (let ((column-widths (sg-column-sizes structural-geometry))
 	(beam-height (sg-beam-thickness structural-geometry))
-	(thickness (sg-wall-thickness structural-geometry))
+	(thickness (if exterior (sg-exterior-wall-thickness structural-geometry)
+		       (sg-wall-thickness structural-geometry)))
 	(Ec (sg-column-elasticity structural-geometry))
 	(Ew (sg-wall-elasticity structural-geometry)))
     (map 'vector (lambda (column-width Ic Ec)
@@ -334,30 +351,41 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 	(report-subsection "Frames and Infill Walls (along X-axis)")
 	;; frames along x-axis having m bays 
 	(let* ((Kw (if strut (infill-walls-stiffness l height Ic structural-geometry :exterior nil)))
+	       (KwExt (if strut (infill-walls-stiffness l height Ic structural-geometry :exterior t)))
 	       (Kc (map 'vector #'(lambda (K) (* m K)) Kc))
 	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	       (local-k (n-floors-k number-of-storey each-floor-k)))
+	       (local-k (n-floors-k number-of-storey each-floor-k))
+	       (local-k-ext (n-floors-k number-of-storey (if strut (map 'vector #'+ Kc KwExt) Kc)))
+	       (i 0))
 
 	  (report-values "Local Stiffness" local-k)
 	  (grid yf   ;; y coordinate of frames
 		:shift (- yc) ;; change y coord relative to mass centre TODO: ground floor !! sure?
 		:size n :at b :do
-		(mincf global-k (local-to-global-k local-k :direction :y :distance yf))))
+		(if (or (= i 0) (= i (1- n)))
+		    (mincf global-k (local-to-global-k local-k-ext :direction :y :distance yf))
+		    (mincf global-k (local-to-global-k local-k :direction :y :distance yf)))
+		(incf i)))
 	
 	(report-subsection "Frames and Infill Walls (along Y-axis)")
 	;; frames along y-axis
-	(let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry)))
+	(let* ((Kw (if strut (infill-walls-stiffness b height Ic structural-geometry :exterior nil)))
+	       (KwExt (if strut (infill-walls-stiffness b height Ic structural-geometry :exterior t)))
 	       (Kc (map 'vector #'(lambda (K) (* n K)) Kc))
 	       (each-floor-K (if strut (map 'vector #'+ Kc Kw) Kc))
-	       (local-k (n-floors-k number-of-storey each-floor-K)))
+	       (local-k (n-floors-k number-of-storey each-floor-K))
+	       (local-k-ext (n-floors-k number-of-storey (if strut (map 'vector #'+ Kc KwExt) Kc)))
+	       (j 0))
 
 	  (report-values "Local Stiffness " local-k)
 	  (grid xf
 		:shift (- xc)
 		:size m
 		:at l :do
-		(mincf global-k (local-to-global-k local-k
-						   :direction :x :distance xf))))
+		(if (or (= j 0) (= j (1- m)))
+		    (mincf global-k (local-to-global-k local-k :direction :x :distance xf))
+		    (mincf global-k (local-to-global-k local-k-ext :direction :x :distance xf)))
+		(incf j)))
 	(report-section "Stiffness Matrix")
 	(reporting
 	 (mprint global-k))
@@ -379,6 +407,7 @@ But we now don't assume same stiffness so 2 = k_i + k_i+1 and -1 = k_i+-1"
 									:initial-element 0.3d0)
 					      :column-elasticity (Ec #(20 20 20))
 					      :wall-thickness 0.230d0
+					      :exterior-wall-thickness 0.230d0
 					      :slab-thickness 0.15d0)))
     (report-section "Inputs")
     (report "" geometry structure)
