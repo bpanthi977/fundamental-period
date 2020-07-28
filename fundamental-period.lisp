@@ -1,6 +1,6 @@
 ;;;; MOI.lisp
 
-(in-package #:MOI)
+(in-package #:fundamental-period)
 
 ;;; Looping on Grid 
 ;;; Shapes, Offsets
@@ -29,7 +29,7 @@
   (column-sizes (make-array 1 :element-type 'double-float) :type (vector double-float)) ;; column is assumed square
   (beam-thickness 0.500d0 :type double-float)
   (beam-width 0.300d0 :type double-float)
-  (wall-thickness 0.1250d0 :type double-float)
+  (wall-thickness 0.1150d0 :type double-float)
   (exterior-wall-thickness 0.230d0 :type double-float)
   (slab-thickness 0.150d0 :type double-float)
   (floor-loads 3.5d0 :type double-float)

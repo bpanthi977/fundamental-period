@@ -1,4 +1,4 @@
-(in-package #:MOI)
+(in-package #:fundamental-period)
 
 (defmacro grid (&rest form-and-body)
   "Run code at grid points

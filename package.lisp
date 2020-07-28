@@ -1,4 +1,5 @@
 ;;;; package.lisp
 
-(defpackage #:MOI
-  (:use #:cl))
+(defpackage #:fundamental-period
+  (:use #:cl)
+  (:nicknames :fp))

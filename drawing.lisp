@@ -1,4 +1,4 @@
-(in-package :moi)
+(in-package :fundamental-period)
 (ql:quickload :sdl-gui-utils)
 
 (defparameter *register-shape-for-drawing* nil)

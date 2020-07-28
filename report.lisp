@@ -1,4 +1,4 @@
-(in-package #:moi)
+(in-package #:fundamental-period)
 
 (defparameter *reporting-level* :none
   ":none :default, :detailed, :verbose, :vverbose")
